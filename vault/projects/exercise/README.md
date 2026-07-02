@@ -23,7 +23,7 @@ status: active
 
 | 文件 | 用途 |
 |------|------|
-| `strength-log.csv` | 原始训练数据（教练卡片 OCR → 结构化 CSV） |
+| `strength-log.csv` | 原始训练数据（共享 ForOpenClaw vault 的 CSV） |
 | `sessions/YYYY-MM-DD.md` | 每次训练的详细 session 记录 |
 | `data/` | 导出的结构化数据 |
 
