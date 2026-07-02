@@ -11,22 +11,38 @@ status: active
 
 系统化记录每次训练，支持教练卡片 OCR → 结构化数据 → 纵向对比分析。
 
+## 工作流
+
+```
+教练卡片（拍照）→ Vision OCR → strength-log.csv（原始记录）
+    → sessions/YYYY-MM-DD.md（详细 session 笔记 + 动作名校验）
+    → 用户确认动作名 → 训记 API 写回（xunji-trains skill）
+```
+
+## 文件说明
+
+| 文件 | 用途 |
+|------|------|
+| `strength-log.csv` | 原始训练数据（教练卡片 OCR → 结构化 CSV） |
+| `sessions/YYYY-MM-DD.md` | 每次训练的详细 session 记录 |
+| `data/` | 导出的结构化数据 |
+
+## CSV 字段
+
+```
+date,muscle_group,intensity_pct,order,exercise,weight,sets_reps,notes
+```
+
+- `exercise` — 教练卡片原名（未匹配 catalog 前）
+- `notes` — 确认状态 + 纠错记录
+
 ## 工具链
 
-- **训记 App** — `xunji-trains` / `xunji-diet` / `xunji-body` skills
-- **OCR** — vision 工具（MiniMax CN）识别教练卡片
-- **数据源** — 训记 API + 教练手写卡片 + 体脂秤
+- **Vision OCR** — MiniMax CN 识别教练卡片
+- **xunji-trains** — 动作名校验 + 训记 API 写回
+- **xunji-diet** — 饮食记录
+- **xunji-body** — 身体数据（体重/体脂）
 
-## 数据流
+## 最近训练
 
-```
-教练卡片（拍照）→ Vision OCR → 结构化（动作/重量/次数）
-    → 动作名校验（GitHub catalog）
-    → 展示 diff → 用户确认 → 写回训记 API
-    → 缓存到 xunji-cache/
-```
-
-## 目录
-
-- `sessions/` — 每次训练的 session 记录
-- `data/` — 导出的结构化数据（CSV/JSON）
+（训练后自动更新）
