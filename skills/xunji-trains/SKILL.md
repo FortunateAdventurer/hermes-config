@@ -1,7 +1,7 @@
 ---
 name: xunji-trains
 description: "Use when user asks to read/write/organize 训记 (Xunji) App training data. Reads/writes training records via Open API v2, with caching, rate-limiting, and pre-write confirmation. Movements use Chinese names only."
-version: 1.2.0
+version: 1.3.0
 author: Hermes Agent
 license: MIT
 metadata:
@@ -361,9 +361,56 @@ dry_run 请求也吃 45s 写限频。批量测试时按真实写入节奏等。
 
 ---
 
-## 与现有工作流的关系
+## 完整训练数据工作流
 
-- 外部数据（教练卡片、OCR、session .md、Apple Watch）继续走 `projects/exercise/sessions/` 整理
-- 训记 是其中**一个**数据源（用户自己 App 端的记录），不是唯一源
-- 整理时如果发现 训记 和 `projects/exercise/strength-log.csv` 不一致，停下来问用户以哪个为准
-- 不要把 训记 里的数据自动覆盖到 `projects/exercise/`——反过来同理
+标准流程（教练卡片 → 训记）：
+
+```
+教练卡片（拍照）→ Vision OCR → strength-log.csv（原始数据，教练原名）
+    → sessions/YYYY-MM-DD.md（详细 session + 动作名校验映射表）
+    → 用户确认动作名 → 训记 API 写回
+```
+
+### 步骤详解
+
+1. **OCR 识别**：用户拍照发教练卡片 → OCR 识别日期、肌群、强度、动作/重量/组数次数
+   - **优先用 MiniMax CN M3 直接 curl**（Hermes vision 工具对 minimax_cn 路由有问题，需手动绕过）
+   - curl 命令：`IMG_B64=$(base64 -i <图片> | tr -d '\n') && source ~/.hermes/.env && curl -s --compressed -X POST "https://api.minimax.chat/v1/text/chatcompletion_v2" -H "Authorization: Bearer $MINIMAX_CN_API_KEY" -d '{"model":"MiniMax-M3","messages":[{"role":"user","content":[{"type":"text","text":"请识别这张健身训练卡片上的所有文字"},{"type":"image_url","image_url":{"url":"data:image/jpeg;base64,$IMG_B64"}}]}]}'`
+   - OCR 后用户会纠正误读（手写卡片常见：月份数字、动作名、lbs/kg 混淆）
+2. **写入 CSV**：原始数据先落 `ForHermes/projects/exercise/strength-log.csv`（字段：`date,muscle_group,intensity_pct,order,exercise,weight,sets_reps,notes`），动作名保留教练卡片原名
+3. **写 session 笔记**：在 `ForHermes/projects/exercise/sessions/YYYY-MM-DD.md` 记录完整 session，含动作名校验映射表（教练原名 → catalog 名）、课前状态、OCR 纠错记录、写回 localid
+4. **动作名校验**：按「动作名校验」流程逐动作匹配，推荐候选项给用户确认
+5. **写回训记**：确认后通过 `api_upsert_trains_for_llm_v2` 写回，记录 `localid` 到 session 笔记
+
+### CSV 格式
+
+```csv
+date,muscle_group,intensity_pct,order,exercise,weight,sets_reps,notes
+2026-07-02,胸,75,1,杠铃卧推,22.5 kg,4×10,已确认
+```
+
+- `exercise` — 教练卡片原名（未匹配 catalog 前）
+- `notes` — 确认状态 + 纠错记录（`✅ 已确认` / `OCR 纠错：xxx`）
+- 教练原名在 CSV 永不动（**6/15 政策**）
+
+### 数据源关系
+
+- CSV / session .md 在 `ForHermes/projects/exercise/`（Obsidian vault）
+- 训记 API 在 `xunji-cache/`（Hermes 本地缓存）
+- 训记是其中一个数据源，不是唯一源
+- 发现训记和 CSV 不一致时，停下来问用户以哪个为准
+- 不要把训记数据自动覆盖到 CSV，反之同理
+
+### ForHermes Vault 结构
+
+```
+ForHermes/
+├── 欢迎.md              ← 索引入口
+├── projects/exercise/   ← 健身训练跟踪
+│   ├── strength-log.csv ← 原始训练数据
+│   ├── sessions/        ← 每次训练详细记录
+│   └── data/            ← 导出数据
+├── diary/               ← 每日会话记录（AI 自动写）
+├── my-knowledge/        ← AI 自主结构化知识（Claim-Evidence）
+└── templates/           ← 笔记模板（diary / knowledge / claim-evidence / project-session）
+```
